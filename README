@@ -1,0 +1,10 @@
+this is an API server app for chat application
+
+Technologies used :
+mongoDB
+mongoose
+node.js
+express.js
+express-session
+passport.js
+socket.io

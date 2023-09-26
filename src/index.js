@@ -1,93 +1,105 @@
-import path from 'path'
-import url from 'url'
-import http from 'http'
-import express from 'express'
-// import cors from 'cors'
-import cookieParser from 'cookie-parser'
-import bodyParser from 'body-parser'
-import { Server } from 'socket.io'
-import { instrument } from "@socket.io/admin-ui"
-// const socketio = require('socket.io')
+// import dotenv from 'dotenv';
+// dotenv.config({ path: `./env-files/${process.env.NODE_ENV || 'development'}.env`, options: { debug: true } });
 
-import routes from './routes.js'
-import sockets from './sockets.js'
+// import path from 'path'
+// import url from 'url'
+import http from 'http';
 
-const __filename = url.fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import express from 'express';
+import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
+// import bodyParser from 'body-parser';
+import cors from 'cors';
+
+// import mongoose from 'mongoose';
+// import { mongooseConnection, connection, client, connectDatabase } from './database.js';
+import database from './database.js';
+import { clearDatabase, populateDatabase } from './seeder.js';
+
+import session from 'express-session';
+// import MongoStore from 'connect-mongo';
+import sessionStore from './config/sessionStore.js';
+
+import passport from 'passport';
+import passportExecute from './passport.js';
+
+import routes from './routes.js';
+// import routes from './routes/all.js';
+
+import io from './sockets.js';
+import { instrument } from "@socket.io/admin-ui";
+
+import colors from 'colors';
+
+// await connectDatabase();
+
+// await buildDatabase();
+
 const port = process.env.PORT || 8000;
 
-console.log(import.meta.url)
-console.log(__filename, process.cwd())
+const app = express();
 
-const app = express()
-const server = http.createServer(app)
-let io = new Server(server, {
-  serveClient: true,
-  cors: {
-    // origin: "*", //when this is written then socket.io admin-ui does not work
+const httpServer = http.createServer(app);
+
+// app.use(morgan("dev"));
+
+io.attach(httpServer);
+
+// go to this site ---> https://admin.socket.io/
+instrument(io, {
+  auth: false,
+  mode: "development",
+});
+
+app.use(cors(
+  {
     origin: ['http://localhost:5173', 'https://admin.socket.io'],
     methods: "*",
-    // methods: ["GET", "POST"],
-    allowedHeaders: "*",
-    // allowedHeaders: ["my-custom-header"],
+    allowedHeaders: ["Access-Control-Allow-Origin", "Content-Type", "Authorization"],
     credentials: true,
   }
-})
+));
 
-instrument(io, {
-  auth: false
-})
+app.use(cookieParser());
 
-io.on('connection', (socket) => {
-  console.log(socket.id)
+app.use(express.json());
 
-  socket.on("connection", (data) => {
-    console.log(data)
-    // online[data.user_id] = socket.id
-  })
-  socket.on('disconnect', function (data) {
-    console.log(data)
-    // online[data.user_id] = null
-  })
-  socket.on('connect-to-all-my-chats', (data) => {
-    console.log(data)
-    data.forEach(chat_id => {
-      socket.join(chat_id)
-    })
-  })
-  socket.on('connect-to-chat', (data) => {
-    console.log(data)
-    socket.join('' + data.chat_id)
-  })
-  socket.on('send-media-message', (data) => {
-    console.log(data)
-    socket.to('' + data.chat_id).emit('receive-media-message', data)
-  })
-})
+app.use(express.urlencoded({ extended: true }));
 
-// console.log(io)
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false, // don't save session if unmodified
+  saveUninitialized: false, // don't create session until something stored
+  store: sessionStore,
+  cookie: {
+    httpOnly: false,
+    maxAge: 1000 * 60 * 60 * 24 * 7 // 1 week
+  }
+}));
 
-// sockets(io)
+app.use(passport.initialize());
 
-//app.use("/", express.static(path.join(__dirname, "public")))
+// both are same
+app.use(passport.session());
+// app.use(passport.authenticate('session'));
 
-// app.use(cors())
+// protects all routes
+// app.use(passport.authenticate('session')); //basic local session token bearer provider openid
 
-// console.log(req.cookies) without using folowing line
-app.use(cookieParser())
+app.use((req, res, next) => {
+  // console.log("req.session", req.session);
+  console.log("session ID :", req.sessionID);
+  console.log("user name  :", req.user?.name);
+  // console.log("req.isAuthenticated()", req.isAuthenticated());
+  next();
+});
 
-// see if below methods works
-// app.use(express.cookieParser())
-// app.use(express.json())
+// app.use("/", express.static(path.join(process.cwd(), "public")));
 
-app.use(bodyParser.text({type: '/'}))
+app.use('/', routes);
 
-app.use(bodyParser.json())
+httpServer.listen(port, () => {
+  console.log(`----------> Express server app - rivendell - running on port ${port}`.bgGreen);
+});
 
-app.use(express.urlencoded({ extended: true }))
-
-app.use('/', routes)
-
-server.listen(port, () => {
-  console.log(`server app running on port ${port}`)
-})
+export default app;

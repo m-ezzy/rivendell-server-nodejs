@@ -1,36 +1,58 @@
-import express from 'express'
-import controllers from './controllers.js'
+import { Router } from 'express';
+import passport from 'passport';
 
-import multer from 'multer'
-const uploadFile = multer({
-	dest: './temp'
+import authController from './controllers/auth.js';
+import * as userController from './controllers/user.js';
+import * as chatController from './controllers/chat.js';
+import * as messageController from './controllers/message.js';
+
+let authRouter = Router();
+let userRouter = Router();
+let chatRouter = Router();
+let messageRouter = Router();
+let allRouter = Router()
+
+authRouter
+.post("/login", passport.authenticate('local'), authController.login)
+.post("/login", authController.login)
+.post("/logout", authController.logout)
+.post("/isAuthenticated", authController.isAuthenticated);
+
+userRouter
+.post("/create", userController.create) //signup
+.post("/get", userController.get)
+.post("/update", userController.update)
+.delete("/delete", userController.deleteUser)
+.post("/search", userController.search);
+
+chatRouter
+.post("/create", chatController.create)
+.post("/previous", chatController.previous);
+
+messageRouter
+.post("/create", messageController.create)
+.post("/previous", messageController.previous);
+
+allRouter
+.use('/auth', authRouter)
+.use('/user', userRouter)
+.use('/chat', chatRouter)
+.use('/message', messageRouter)
+
+.get("/", ( req, res, next ) => {
+  res.status(200).json({
+		cookies: req.cookies,
+		signedCookies: req.signedCookies,
+		secret: req.secret,
+		sessionID: req.sessionID,
+		session: req.session,
+		// sessionStore: req.sessionStore,
+		user: req.user
+	});
 })
 
-let router = express.Router()
+.use('/*', (req, res, next) => {
+	res.status(404).json({ message: 'route not found!' });
+});
 
-//router.get("/api/media_image/:image_name/:ext", (req, res) => controllers.getMediaImage(req, res))
-router.get("/api/get_media_data/:filename", (req, res) => controllers.getMediaData(req, res))
-
-router.get("/api", (req, res) => {
-  res.header('Access-Control-Allow-Origin', '*')
-  res.send("<h1>React and Express</h1>")
-})
-router.get("/*", (_req, res) => {
-  res.json('this is not a route!')
-  //res.sendFile(path.join(__dirname, "index.html"))
-})
-
-router.post("/api/check_username", (req, res) => controllers.checkUsername(req, res))
-router.post("/api/check_password", (req, res) => controllers.checkPassword(req, res))
-router.post("/api/signup", (req, res) => controllers.signup(req, res))
-router.post("/api/login", (req, res) => controllers.login(req, res))
-
-router.post("/api/create_chat", (req, res) => controllers.createChat(req, res))
-router.post("/api/previous_chats", (req, res) => controllers.previousChats(req, res))
-router.post("/api/previous_media", (req, res) => controllers.previousMedia(req, res))
-router.post("/api/send_message", (req, res) => controllers.sendMessage(req, res))
-router.post("/api/send_media/files", uploadFile.array('files', 5), (req, res) => controllers.sendMediaFiles(req, res))
-
-//multer({dest: './data/documents'}).array('files', 5)
-
-export default router
+export default allRouter;
